@@ -620,6 +620,32 @@ allow_renegotiation_disabled:
   }
 }
 
+/* gst_buffer_make_writable() copies a buffer it cannot share, and it copies
+ * GST_MEMORY_FLAG_NO_SHARE memory by value, through the allocator's mem_copy.
+ * Jetson's nvvidconv marks its NVMM memory NO_SHARE and has no mem_copy, so
+ * that value is the NvBufSurface descriptor alone: the copy points at the
+ * producer's hardware surface without holding it. The producer's four-buffer
+ * pool then takes the source buffer back and writes a later frame into the
+ * surface while the copy is still queued here, and the listener reads that
+ * later frame, or an earlier one again. Keep the source buffer alive until the
+ * copy is freed, as a passthrough-ts listener does by holding the buffer
+ * itself. */
+static GstBuffer *
+gst_inter_pipe_src_make_writable (GstBuffer * buffer)
+{
+  GstBuffer *copy;
+
+  if (gst_buffer_is_writable (buffer))
+    return buffer;
+
+  copy = gst_buffer_copy (buffer);
+  gst_mini_object_set_qdata (GST_MINI_OBJECT_CAST (copy),
+      g_quark_from_static_string ("GstInterPipeSrcSourceBuffer"), buffer,
+      (GDestroyNotify) gst_buffer_unref);
+
+  return copy;
+}
+
 static gboolean
 gst_inter_pipe_src_push_buffer (GstInterPipeIListener * iface,
     GstBuffer * buffer, guint64 basetime)
@@ -642,7 +668,7 @@ gst_inter_pipe_src_push_buffer (GstInterPipeIListener * iface,
   if (GST_INTER_PIPE_SRC_COMPENSATE_TIMESTAMP == src->stream_sync) {
     guint64 difftime;
 
-    buffer = gst_buffer_make_writable (buffer);
+    buffer = gst_inter_pipe_src_make_writable (buffer);
 
     srcbasetime = gst_element_get_base_time (GST_ELEMENT (appsrc));
 
