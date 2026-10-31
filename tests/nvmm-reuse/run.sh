@@ -53,7 +53,7 @@ run() { # NAME MODE
     exit 1
   fi
   GST_PLUGIN_PATH="$plugins" GST_REGISTRY="$WORK/$1.registry" \
-    "$WORK/nvmm-reuse" "$2" "$SECONDS_PER_RUN" "$FRAME_US" "$STALL_US" 2>/dev/null
+    "$WORK/nvmm-reuse" "$2" "$SECONDS_PER_RUN" "$FRAME_US" "$STALL_US"
 }
 
 echo "gst-interpipe $STOCK_REF (stock) and $(git -C "$ROOT" describe --tags --always --dirty) (fixed), $(gst-launch-1.0 --version | sed -n 2p)"
@@ -69,9 +69,14 @@ failed=0
 for build in stock fixed; do
   for mode in passthrough-ts compensate-ts; do
     result=$(run "$build" "$mode")
-    wrong=$(python3 -c 'import json, sys; print(json.loads(sys.argv[1])["wrongContent"])' "$result")
+    read -r recorded copies wrong < <(python3 -c 'import json, sys; r = json.loads(sys.argv[1]); print(r["recorded"], r["descriptorCopies"], r["wrongContent"])' "$result")
     expect_wrong=$([ "$build/$mode" = stock/compensate-ts ] && echo yes || echo no)
-    if { [ "$expect_wrong" = yes ] && [ "$wrong" -eq 0 ]; } ||
+    # No wrong frames proves nothing unless frames arrived and, in
+    # compensate-ts, every one came through the copy. Not just "some": the base
+    # class copies the first buffer in every mode, to flag it DISCONT.
+    if [ "$recorded" -eq 0 ] ||
+      { [ "$mode" = compensate-ts ] && [ "$copies" -ne "$recorded" ]; } ||
+      { [ "$expect_wrong" = yes ] && [ "$wrong" -eq 0 ]; } ||
       { [ "$expect_wrong" = no ] && [ "$wrong" -ne 0 ]; }; then
       verdict=FAIL
       failed=1
