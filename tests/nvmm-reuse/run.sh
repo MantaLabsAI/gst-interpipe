@@ -80,7 +80,9 @@ failed=0
 for build in stock fixed; do
   for mode in passthrough-ts compensate-ts; do
     result=$(run "$build" "$mode")
-    read -r recorded copies wrong < <(python3 -c 'import json, sys; r = json.loads(sys.argv[1]); print(r["recorded"], r["descriptorCopies"], r["wrongContent"])' "$result")
+    # int(), because a value [ -eq ] can't compare fails the test it is in, and
+    # every test below is a reason to fail: the case would pass.
+    read -r recorded copies wrong < <(python3 -c 'import json, sys; r = json.loads(sys.argv[1]); print(int(r["recorded"]), int(r["descriptorCopies"]), int(r["wrongContent"]))' "$result")
     expect_wrong=$([ "$build/$mode" = stock/compensate-ts ] && echo yes || echo no)
     # No wrong frames proves nothing unless frames arrived and, in
     # compensate-ts, every one came through the copy. Not just "some": the base
