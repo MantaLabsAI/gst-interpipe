@@ -17,7 +17,8 @@
 #
 # Usage: tests/nvmm-reuse/run.sh [SECONDS_PER_RUN]   (default 10)
 #        STOCK_REF=<tag> overrides the upstream tag, which defaults to the
-#        nearest tag that is not one of this fork's -manta.<n> releases.
+#        nearest tag that is not one of this fork's -manta.<n> releases. It
+#        must name the same commit here as upstream.
 # Needs: git, cc, pkg-config with gstreamer-1.0 and gstreamer-app-1.0, meson,
 #        ninja, python3.
 set -euo pipefail
@@ -31,9 +32,9 @@ STOCK_REF=${STOCK_REF:-$(git -C "$ROOT" describe --tags --abbrev=0 --exclude '*-
 FRAME_US=6000
 STALL_US=120000
 
-# Canonical, so it matches the plugin path gst-inspect prints (macOS /var is a
-# symlink to /private/var).
-WORK=$(cd "$(mktemp -d)" && pwd -P)
+# Its own assignment, so errexit stops a failed mktemp before the trap below
+# can delete anything.
+WORK=$(mktemp -d)
 trap 'rm -rf "${WORK:?}"' EXIT
 
 build_interpipe() { # NAME SOURCE_DIR
@@ -62,6 +63,13 @@ run() { # NAME MODE
 echo "gst-interpipe $STOCK_REF (stock) and $(git -C "$ROOT" describe --tags --always --dirty) (fixed), $(gst-launch-1.0 --version | sed -n 2p)"
 git -c advice.detachedHead=false clone -q --branch "$STOCK_REF" --depth 1 \
   https://github.com/RidgeRun/gst-interpipe.git "$WORK/stock-src"
+# A tag moved upstream, or a branch of the same name, would otherwise build and
+# pass as the stock baseline.
+if [ "$(git -C "$WORK/stock-src" rev-parse HEAD)" != \
+  "$(git -C "$ROOT" rev-parse "$STOCK_REF^{commit}")" ]; then
+  echo "RidgeRun's $STOCK_REF is not the commit this checkout's $STOCK_REF names" >&2
+  exit 1
+fi
 build_interpipe stock "$WORK/stock-src"
 build_interpipe fixed "$ROOT"
 # shellcheck disable=SC2046 # pkg-config prints several flags on purpose

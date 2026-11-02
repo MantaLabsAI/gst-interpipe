@@ -643,6 +643,13 @@ gst_inter_pipe_src_make_writable (GstBuffer * buffer)
     return buffer;
 
   copy = gst_buffer_copy (buffer);
+  if (!copy) {
+    /* The memory could not be copied. Release the source, as
+     * gst_buffer_make_writable does: nothing would hold it, and a leaked pool
+     * buffer starves the producer. */
+    gst_buffer_unref (buffer);
+    return NULL;
+  }
   gst_mini_object_set_qdata (GST_MINI_OBJECT_CAST (copy),
       g_quark_from_static_string ("GstInterPipeSrcSourceBuffer"), buffer,
       (GDestroyNotify) gst_buffer_unref);
