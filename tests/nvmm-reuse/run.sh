@@ -37,8 +37,11 @@ WORK=$(cd "$(mktemp -d)" && pwd -P)
 trap 'rm -rf "${WORK:?}"' EXIT
 
 build_interpipe() { # NAME SOURCE_DIR
-  meson setup "$WORK/$1" "$2" -Denable-gtk-doc=false >"$WORK/$1-setup.log"
-  meson compile -C "$WORK/$1" >"$WORK/$1-build.log"
+  # meson writes its errors to the log, which the trap deletes: show it.
+  meson setup "$WORK/$1" "$2" -Denable-gtk-doc=false >"$WORK/$1-setup.log" ||
+    { cat "$WORK/$1-setup.log" >&2; return 1; }
+  meson compile -C "$WORK/$1" >"$WORK/$1-build.log" ||
+    { cat "$WORK/$1-build.log" >&2; return 1; }
 }
 
 # Runs one attach mode against one build; prints the harness's JSON line.

@@ -635,6 +635,10 @@ gst_inter_pipe_src_make_writable (GstBuffer * buffer)
 {
   GstBuffer *copy;
 
+  /* Writable means the caller holds the only reference to the source buffer
+   * itself: its timestamps change in place, and it keeps its surface until the
+   * listener frees it, as under passthrough-ts. interpipesink never hands a
+   * listener one, since it keeps its own reference while it pushes. */
   if (gst_buffer_is_writable (buffer))
     return buffer;
 
